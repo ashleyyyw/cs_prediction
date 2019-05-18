@@ -1,0 +1,189 @@
+---
+title: "Analysis of Concrete Slump"
+author: "Yangwei Yan"
+date: "May 17, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# load packages
+library(tidyverse)
+library(ggplot2)
+library(ggthemes)
+library(purrr)
+library(caret)
+library(rattle)
+library(grid)
+library(gridExtra)
+library(lattice)
+library(Hmisc)
+
+```
+
+```{r}
+# read data
+slump = read.csv(url('https://archive.ics.uci.edu/ml/machine-learning-databases/concrete/slump/slump_test.data'), header = FALSE, skip = 1, col.names = c('no','cement','slag','fly_ash','water','sp','coarse_aggr','fine_aggr','slump','flow','compressive_strength'))
+slump = select(slump, -no)
+```
+
+
+## Exploratory data analysis (EDA)
+a. Summary table
+```{r}
+#summary_result = Hmisc::describe(slump)
+knitr::kable(summary(slump))
+```
+b. Boxplot for each variable
+```{r}
+g = list()
+g[[1]] = slump %>% 
+    ggplot(aes(x = "Cement", y = cement)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[2]] = slump %>% 
+    ggplot(aes(x = "Slag", y = slag)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[3]] = slump %>% 
+    ggplot(aes(x = "Fly ash", y = fly_ash)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[4]] = slump %>% 
+    ggplot(aes(x = "Water", y = water)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[5]] = slump %>% 
+    ggplot(aes(x = "SP", y = sp)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[6]] = slump %>% 
+    ggplot(aes(x = "Coarse Aggr.", y = coarse_aggr)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[7]] = slump %>% 
+    ggplot(aes(x = "Fine Aggr.", y = fine_aggr)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[8]] = slump %>% 
+    ggplot(aes(x = "Slump", y = slump)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[9]] = slump %>% 
+    ggplot(aes(x = "Flow", y = flow)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = T) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+g[[10]] = slump %>% 
+    ggplot(aes(x = "Compressive strength", y = compressive_strength)) + 
+    geom_violin(alpha = 0.5,draw_quantiles = c(0.25,0.75)) +
+    stat_summary(fun.y = median, geom = "point", color = "blue", size = 4)
+
+grid.arrange(grobs = g, ncol = 4)
+```
+
+- compressive strength,coarse Aggr are normally distributed variable,  while cement, slag, fly ash, sp,slump, flow are all skewed, not symmetricly distributed.
+- I plotted the violin plot. The blue point is the median value of the variable, the two lines in the box indicates 25%  and 70% quantiles. the width of the box show the the probability density of the data at different values. As the volin plot suggested, several variables such as cement, slag showed a multi-mode distribution. 
+- Since strong skewness observed for several variables, the log-transformation might help. In addition, to deal with multi-mode distribution, it might helpful to perform analysis using stratification or transform the continue variables into category variables.
+- 
+
+## relationship between 28-day compressive strength (CS) and the seven input measurement features.
+```{r}
+# stratify CS into 4 categories
+slump = slump %>%
+  mutate(cs_bin = ifelse(compressive_strength<=30, '<=30', ifelse(compressive_strength>30 & compressive_strength<=35, '30-35', ifelse(compressive_strength>35 & compressive_strength<=40, '35-40', '>40')))) %>%
+  mutate(cs_bin = factor(cs_bin,levels = c('<=30','30-35','35-40','>40')))
+
+# explore the association between CS and predictors
+box = list()
+box[[1]] = slump %>% ggplot(aes(x=cs_bin, y=cement)) + 
+  geom_boxplot(aes(fill = cs_bin))
+box[[2]] = slump %>% ggplot(aes(x=cs_bin, y=slag)) + geom_boxplot(aes(fill = cs_bin))
+box[[3]] = slump %>% ggplot(aes(x=cs_bin, y=fly_ash)) + geom_boxplot(aes(fill = cs_bin))
+box[[4]] = slump %>% ggplot(aes(x=cs_bin, y=water)) + geom_boxplot(aes(fill = cs_bin))
+box[[5]] = slump %>% ggplot(aes(x=cs_bin, y=sp)) + geom_boxplot(aes(fill = cs_bin))
+box[[6]] = slump %>% ggplot(aes(x=cs_bin, y=coarse_aggr)) + geom_boxplot(aes(fill = cs_bin))
+box[[7]] = slump %>% ggplot(aes(x=cs_bin, y=fine_aggr)) + geom_boxplot(aes(fill = cs_bin))
+
+grid.arrange(grobs = box, ncol = 3)
+```
+
+- The first boxplot demonstrates the correlation between 28-day compressive strength and cement. As cement amount increases, the 28-day compressive strength increases though the variance of the cement is very large for the first few bins.
+- Based on the observation, water and cement are two most predictive. In general, as the water decreased, CS increased. And as cement increased, CS increased, though this might not be a linear relationship. When CS is larger than 40, its cement value becomes significantly higher. Other variables like fly_ash can also be a good predictor. 
+
+## Decision tree model
+```{r}
+# prepare training, validation and test datasets
+set.seed(100)
+num_train = ceiling(103*0.8)
+nrow_train = sample(1:nrow(slump), num_train)
+slump_train = slump[nrow_train,]
+slump_test = slump[-nrow_train,]
+
+# build decision tree model
+tree_fit = train(x = slump_train[,c(1,4)], 
+                 y = slump_train$compressive_strength,
+                 method = 'rpart',
+                 trControl = trainControl(method = 'cv', number = 10),
+                 tuneLength = 5)
+plot(tree_fit)
+tree_fit
+
+# predict test data
+pred_test = predict(tree_fit, slump_test)
+rmse_test = sqrt(mean((pred_test - slump_test$compressive_strength)^2))
+# plot the regression decision tree
+fancyRpartPlot(tree_fit$finalModel)
+```
+- I trained a regression decision tree and used cross-validation on the training set to determine the optimal tree size by chosing the optimal parameters. The first plot shows the tuning results with 5 tuning parameters and the corresponding root mean square errors (RMSE). The second plot demonstrates how the best trained regression tree works. It demonstrates the cut point for each step and the counts and proportion of each decision. 
+- The root-mean-squared error (RMSE) is a measure of how well your model performed. It does this by measuring difference between predicted values and the actual values. Lower RMSE usually means better prediction performance on test data.
+- The idea depth of my final trained model is 5. It is controled by the complexity parameter, which can be selected by cross-validation.
+- Accuracy score is used to measure the accuracy of a classification model, which is defined as the portion of correct predictions. My model is a regression model and it does not make sense to see accuracy of a regression model since predictions can hardly equal to the true value. The only way to calculate a meaningful accuracy score for a regression model is to stratify the output into bins and then treate the prediction as correct if it falls into the same bin as true value. 
+
+## Random forest
+```{r}
+set.seed(100)
+models = list()
+tunegrid <- expand.grid(.mtry=c(1:7))
+for (num_tree in c(100, 200, 300, 400, 500)){
+  set.seed(100)
+  rf_fit = train(x = slump_train[,-(8:11)], 
+                 y = slump_train$compressive_strength,
+                 method = 'rf',
+                 tuneGrid = tunegrid,
+                 trControl = trainControl(method = 'cv', number = 10),
+                 ntree = num_tree)
+  models[[as.character(num_tree)]] = rf_fit
+}
+
+
+# compare results
+results = NULL
+for(i in names(models)){
+  print(i)
+  n_tree = as.numeric(i)
+  s = models[[i]]
+  model_s = s$results %>% mutate(ntree = n_tree)
+  results = rbind(results,model_s)
+}
+results
+```
+
+- The optimal number of trees are selected by cross-valiation (minimize the RMSE) with grid search of number of trees. The optimal random forest is reached by using 300 trees. 
+- The optimal number of features are selected by cross-valiation (minimize the RMSE) with grid search of features from 1 to 7. The optimal random forest is reached by using 7 features.
+
+What alternative methods might you use to predict CS
+- Instead of using random foreast, we can use Support Vector Regression, Neuron Network, eXtreme Gradient Boosting, K nearest neighbors, linear (or non-linear) regression with L1/L2 regularizations. 
+
+What additional data, not included in the dataset, might help better predict CS?
+- I might be useful to create combination of predictors based on domain knowledge. In addition, According to Neela Deshpande et.al 2014, it might help better predict CS using other predictors such as Admixture (A) (kg/m3), Replacement ratio (RR) (%), and Water to total materials (W/T).
+
+Based on the EDA you completed in the first step, what additional analyses might you complete based on the data structure?
+- Since we can observe strong skewness of several input variables, I will log transform those input variables. In addition, I will normalize the input by mean and standard deviation.
+
+- What applications might your analysis lead to? In plain English, describe what business value these models could provide to a prospective client.
+It is common to have some requirements on 28 days of compressive strength in civil engineering. the random forest model we trained can predict (model) this compresive strength using the materials used in concrete, it can guide the production process and improve the product passing rate and thus reduce the cost. In addition, we can train a binary model where the output is wehether the product can pass the compressive strength test, and then use this model to guide the production process.
+
+
+
+
